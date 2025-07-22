@@ -147,6 +147,11 @@ static void init_font_table() {
     }
 }
 
+void spi_pre_transfer_callback(spi_transaction_t *t) {
+    int dc = (int)t->user;
+    gpio_set_level(PIN_NUM_DC, dc);
+}
+
 void send_cmd(uint8_t cmd) {
     spi_transaction_t t = {
         .length = 8,
@@ -256,6 +261,7 @@ void init_display() {
         .mode = 0,
         .spics_io_num = PIN_NUM_CS,
         .queue_size = 7,
+        .pre_cb = spi_pre_transfer_callback,
     };
 
     ESP_ERROR_CHECK(spi_bus_initialize(HSPI_HOST, &buscfg, 1));
