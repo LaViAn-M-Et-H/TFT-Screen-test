@@ -38,13 +38,6 @@
 #define FONT_HEIGHT  8
 #define FONT_SPACING 1
 #define FONT_NUM_CHARS 95
-
-#define ST7735_NOP     0x00
-#define ST7735_SWRESET 0x01
-#define ST7735_SLPOUT  0x11
-#define ST7735_DISPON  0x29
-#define ST7735_COLMOD  0x3A
-#define ST7735_MADCTL  0x36
 #define TAG "TFT"
 
 static spi_device_handle_t spi;
@@ -255,6 +248,7 @@ void init_display() {
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         .max_transfer_sz = 4096,
+        .dma_chan = SPI_DMA_CH_AUTO
     };
 
     spi_device_interface_config_t devcfg = {
