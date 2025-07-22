@@ -279,49 +279,53 @@ void init_display() {
     ESP_ERROR_CHECK(spi_bus_initialize(HSPI_HOST, &buscfg, 1));
     ESP_ERROR_CHECK(spi_bus_add_device(HSPI_HOST, &devcfg, &spi));
 
-    // More complete initialization sequence
-    send_cmd(0x01);  // Software reset
+    send_cmd(0x00);
+    send_cmd(0x01);
     vTaskDelay(150 / portTICK_PERIOD_MS);
 
-    send_cmd(0x11);  // Sleep out
+    send_cmd(0x11);
     vTaskDelay(120 / portTICK_PERIOD_MS);
 
-    send_cmd(0x36);  // MADCTL: Memory Access Control
-    send_data((uint8_t[]){0x00}, 1);  // RGB order
+    send_cmd(0xB1);
+    send_data((uint8_t[]){0x05, 0x3C, 0x3C}, 3);
+    send_cmd(0xB2);
+    send_data((uint8_t[]){0x05, 0x3C, 0x3C}, 3);
+    send_cmd(0xB3);
+    send_data((uint8_t[]){0x05, 0x3C, 0x3C, 0x05, 0x3C, 0x3C}, 6);
 
-    send_cmd(0x3A);  // COLMOD: Interface Pixel Format
-    send_data((uint8_t[]){0x05}, 1);  // 16 bits/pixel (RGB565)
+    send_cmd(0xB4);
+    send_data((uint8_t[]){0x03}, 1);
 
-    send_cmd(0xB2);  // PORCTRL: Porch Setting
-    send_data((uint8_t[]){0x0C, 0x0C, 0x00, 0x33, 0x33}, 5);
+    send_cmd(0xC0);
+    send_data((uint8_t[]){0xA2, 0x02, 0x84}, 3);
+    send_cmd(0xC1);
+    send_data((uint8_t[]){0xC5}, 1);
+    send_cmd(0xC2);
+    send_data((uint8_t[]){0x0A, 0x00}, 2);
+    send_cmd(0xC3);
+    send_data((uint8_t[]){0x8A, 0x2A}, 2);
+    send_cmd(0xC4);
+    send_data((uint8_t[]){0x8A, 0xEE}, 2);
+    send_cmd(0xC5);
+    send_data((uint8_t[]){0x0E}, 1);
 
-    send_cmd(0xB7);  // GCTRL: Gate Control
-    send_data((uint8_t[]){0x35}, 1);
+    send_cmd(0x3A);
+    send_data((uint8_t[]){0x05}, 1);
 
-    send_cmd(0xBB);  // VCOMS: VCOM Setting
-    send_data((uint8_t[]){0x2B}, 1);
+    send_cmd(0x36);
+    send_data((uint8_t[]){0xC0}, 1); //(0x08, 0x48, 0x88)
 
-    send_cmd(0xC0);  // LCMCTRL: LCM Control
-    send_data((uint8_t[]){0x2C}, 1);
+    send_cmd(0xE0);
+    send_data((uint8_t[]){0x0F, 0x1A, 0x0F, 0x18, 0x2F, 0x28, 0x20, 0x22,
+                          0x1F, 0x1B, 0x23, 0x37, 0x00, 0x07, 0x02, 0x10}, 16);
+    send_cmd(0xE1);
+    send_data((uint8_t[]){0x0F, 0x1B, 0x0F, 0x17, 0x33, 0x2C, 0x29, 0x2E,
+                          0x30, 0x30, 0x39, 0x3F, 0x00, 0x07, 0x03, 0x10}, 16);
 
-    send_cmd(0xC2);  // VDVVRHEN: VDV and VRH Command Enable
-    send_data((uint8_t[]){0x01}, 1);
+    send_cmd(0x29);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
 
-    send_cmd(0xC3);  // VRHS: VRH Set
-    send_data((uint8_t[]){0x12}, 1);
-
-    send_cmd(0xC4);  // VDVS: VDV Set
-    send_data((uint8_t[]){0x20}, 1);
-
-    send_cmd(0xC6);  // FRCTRL2: Frame Rate Control
-    send_data((uint8_t[]){0x0F}, 1);
-
-    send_cmd(0xD0);  // PWCTRL1: Power Control 1
-    send_data((uint8_t[]){0xA4, 0xA1}, 2);
-
-    send_cmd(0x21);  // Display Inversion On
-    send_cmd(0x29);  // Display On
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    ESP_LOGI(TAG, "Display initialized successfully");
 }
 
 void initialize_sntp() {
