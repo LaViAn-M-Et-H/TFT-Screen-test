@@ -241,7 +241,6 @@ void fill_screen(uint16_t color) {
 }
 
 void init_display() {
-    // GPIO Configuration
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << PIN_NUM_DC) | (1ULL << PIN_NUM_RST) | (1ULL << PIN_NUM_BL),
         .mode = GPIO_MODE_OUTPUT,
@@ -249,18 +248,30 @@ void init_display() {
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE
     };
-    gpio_config(&io_conf);
+    esp_err_t ret = gpio_config(&io_conf);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "GPIO config failed: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "GPIO config: OK");
+    }
+    ESP_ERROR_CHECK(ret);
 
-    // Reset display
-    gpio_set_level(PIN_NUM_RST, 0);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    gpio_set_level(PIN_NUM_RST, 1);
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-
-    // Backlight on
     gpio_set_level(PIN_NUM_BL, 1);
+    ESP_LOGI(TAG, "Backlight set to HIGH (GPIO %d)", PIN_NUM_BL);
+    ESP_LOGI(TAG, "Resetting display (GPIO %d)", PIN_NUM_RST);
+    gpio_set_level(PIN_NUM_RST, 0);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    gpio_set_level(PIN_NUM_RST, 1);
+    vTaskDelay(120 / portTICK_PERIOD_MS);
 
     // SPI Initialization
+    sp_err_t ret = spi_bus_free(HSPI_HOST);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "SPI bus freed successfully");
+    } else {
+        ESP_LOGW(TAG, "SPI bus free failed: %s", esp_err_to_name(ret));
+    }
+    
     spi_bus_config_t buscfg = {
         .miso_io_num = PIN_NUM_MISO,
         .mosi_io_num = PIN_NUM_MOSI,
@@ -268,7 +279,6 @@ void init_display() {
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         .max_transfer_sz = 4096,
-        .dma_chan = SPI_DMA_CH_AUTO
     };
 
     spi_device_interface_config_t devcfg = {
@@ -279,8 +289,21 @@ void init_display() {
         .pre_cb = spi_pre_transfer_callback,
     };
 
-    ESP_ERROR_CHECK(spi_bus_initialize(HSPI_HOST, &buscfg, 1));
-    ESP_ERROR_CHECK(spi_bus_add_device(HSPI_HOST, &devcfg, &spi));
+    ret = spi_bus_initialize(HSPI_HOST, &buscfg, SPI_DMA_CH_AUTO);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SPI bus init failed: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "SPI bus init: OK");
+    }
+    ESP_ERROR_CHECK(ret);
+
+    ret = spi_bus_add_device(HSPI_HOST, &devcfg, &spi);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "SPI device add failed: %s", esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "SPI device add: OK");
+    }
+    ESP_ERROR_CHECK(ret);
 
     send_cmd(0x00);
     send_cmd(0x01);
