@@ -11,6 +11,7 @@
 #include "stdint.h"
 #include "nvs_flash.h"
 #include "esp_netif.h"
+#include "sdkconfig.h"
 
 /* Pin Definitions */
 #define PIN_NUM_MISO   -1
@@ -278,17 +279,48 @@ void init_display() {
     ESP_ERROR_CHECK(spi_bus_initialize(HSPI_HOST, &buscfg, 1));
     ESP_ERROR_CHECK(spi_bus_add_device(HSPI_HOST, &devcfg, &spi));
 
-    // Display Initialization
-    send_cmd(0x01); // Software reset
+    // More complete initialization sequence
+    send_cmd(0x01);  // Software reset
     vTaskDelay(150 / portTICK_PERIOD_MS);
 
-    send_cmd(0x11); // Sleep out
-    vTaskDelay(255 / portTICK_PERIOD_MS);
+    send_cmd(0x11);  // Sleep out
+    vTaskDelay(120 / portTICK_PERIOD_MS);
 
-    send_cmd(0x3A); // Color mode
-    send_data((uint8_t[]){0x05}, 1); // 16-bit color
+    send_cmd(0x36);  // MADCTL: Memory Access Control
+    send_data((uint8_t[]){0x00}, 1);  // RGB order
 
-    send_cmd(0x29); // Display on
+    send_cmd(0x3A);  // COLMOD: Interface Pixel Format
+    send_data((uint8_t[]){0x05}, 1);  // 16 bits/pixel (RGB565)
+
+    send_cmd(0xB2);  // PORCTRL: Porch Setting
+    send_data((uint8_t[]){0x0C, 0x0C, 0x00, 0x33, 0x33}, 5);
+
+    send_cmd(0xB7);  // GCTRL: Gate Control
+    send_data((uint8_t[]){0x35}, 1);
+
+    send_cmd(0xBB);  // VCOMS: VCOM Setting
+    send_data((uint8_t[]){0x2B}, 1);
+
+    send_cmd(0xC0);  // LCMCTRL: LCM Control
+    send_data((uint8_t[]){0x2C}, 1);
+
+    send_cmd(0xC2);  // VDVVRHEN: VDV and VRH Command Enable
+    send_data((uint8_t[]){0x01}, 1);
+
+    send_cmd(0xC3);  // VRHS: VRH Set
+    send_data((uint8_t[]){0x12}, 1);
+
+    send_cmd(0xC4);  // VDVS: VDV Set
+    send_data((uint8_t[]){0x20}, 1);
+
+    send_cmd(0xC6);  // FRCTRL2: Frame Rate Control
+    send_data((uint8_t[]){0x0F}, 1);
+
+    send_cmd(0xD0);  // PWCTRL1: Power Control 1
+    send_data((uint8_t[]){0xA4, 0xA1}, 2);
+
+    send_cmd(0x21);  // Display Inversion On
+    send_cmd(0x29);  // Display On
     vTaskDelay(100 / portTICK_PERIOD_MS);
 }
 
