@@ -220,11 +220,22 @@ void draw_string(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16
 }
 
 void fill_screen(uint16_t color) {
-    uint8_t hi = color >> 8, lo = color & 0xFF;
+    uint8_t buffer[64];
+    for(int i = 0; i < 32; i++) {
+        buffer[i*2] = color >> 8;
+        buffer[i*2+1] = color & 0xFF;
+    }
+    
     set_addr_window(0, 0, TFT_WIDTH-1, TFT_HEIGHT-1);
-    for (int i = 0; i < TFT_WIDTH * TFT_HEIGHT; i++) {
-        send_data(&hi, 1);
-        send_data(&lo, 1);
+    
+    spi_transaction_t t = {
+        .length = TFT_WIDTH * TFT_HEIGHT * 16,
+        .tx_buffer = buffer,
+        .user = (void*)1,
+    };
+    
+    for(int i = 0; i < (TFT_WIDTH * TFT_HEIGHT)/32; i++) {
+        spi_device_polling_transmit(spi, &t);
     }
 }
 
