@@ -140,14 +140,6 @@ const uint8_t font[] = {
     0x08,0x08,0x2A,0x1C,0x08, // '~'
 };
 
-static const uint8_t* font_table[FONT_NUM_CHARS];
-
-static void init_font_table() {
-    for (int i = 0; i < FONT_NUM_CHARS; i++) {
-        font_table[i] = &font[i * FONT_WIDTH];
-    }
-}
-
 void spi_pre_transfer_callback(spi_transaction_t *t) {
     int dc = (int)t->user;
     gpio_set_level(PIN_NUM_DC, dc);
@@ -195,7 +187,7 @@ void draw_pixel(uint16_t x, uint16_t y, uint16_t color) {
 
 void draw_char(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg) {
     if (c < 32 || c >= 32 + FONT_NUM_CHARS) return;
-    const uint8_t *chr = font_table[c - 32];
+    const uint8_t *chr = &font[(c - 32) * FONT_WIDTH];
     for (uint8_t i = 0; i < FONT_WIDTH; i++) {
         uint8_t line = chr[i];
         for (uint8_t j = 0; j < FONT_HEIGHT; j++) {
@@ -208,6 +200,7 @@ void draw_char(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg) {
         }
     }
 }
+
 
 void draw_string(uint16_t x, uint16_t y, const char *str, uint16_t color, uint16_t bg) {
     while (*str) {
