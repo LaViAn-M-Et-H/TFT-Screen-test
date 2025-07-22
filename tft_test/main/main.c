@@ -343,7 +343,6 @@ void initialize_sntp() {
 }
 
 void app_main() {
-    init_font_table();
     init_display();
     initialize_sntp();
 
