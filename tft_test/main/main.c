@@ -187,37 +187,6 @@ void set_addr_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
     send_cmd(0x2C);
 }
 
-void test_gpio() {
-    ESP_LOGI("TEST", "GPIO DC=%d, RST=%d, BL=%d", PIN_NUM_DC, PIN_NUM_RST, PIN_NUM_BL);
-}
-
-void lcd_spi_pre_transfer_callback(spi_transaction_t *t) {
-    int dc = (int)t->user;
-    gpio_set_level(PIN_NUM_DC, dc);
-}
-
-void init_spi() {
-    spi_bus_config_t buscfg = {
-        .miso_io_num = PIN_NUM_MISO,
-        .mosi_io_num = PIN_NUM_MOSI,
-        .sclk_io_num = PIN_NUM_CLK,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-        .max_transfer_sz = 4096,
-    };
-
-    spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = 20 * 1000 * 1000,
-        .mode = 0,
-        .spics_io_num = PIN_NUM_CS,
-        .queue_size = 7,
-        .pre_cb = lcd_spi_pre_transfer_callback,  // required for DC pin!
-    };
-
-    ESP_ERROR_CHECK(spi_bus_initialize(HSPI_HOST, &buscfg, SPI_DMA_CH_AUTO));
-    ESP_ERROR_CHECK(spi_bus_add_device(HSPI_HOST, &devcfg, &spi));
-}
-
 void draw_pixel(uint16_t x, uint16_t y, uint16_t color) {
     if (x >= TFT_WIDTH || y >= TFT_HEIGHT) return;
     uint8_t data[2] = {color >> 8, color & 0xFF};
@@ -262,75 +231,54 @@ void fill_screen(uint16_t color) {
 }
 
 void init_display() {
+    // GPIO Configuration
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << PIN_NUM_DC) | (1ULL << PIN_NUM_RST) | (1ULL << PIN_NUM_BL),
         .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE
     };
-    esp_err_t ret = gpio_config(&io_conf);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "GPIO config failed: %s", esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "GPIO config: OK");
-    }
-    ESP_ERROR_CHECK(ret);
-    gpio_set_level(PIN_NUM_BL, 1);
-    ESP_LOGI(TAG, "Backlight set to HIGH (GPIO %d)", PIN_NUM_BL);
-    test_gpio();
-    ESP_LOGI(TAG, "Resetting display (GPIO %d)", PIN_NUM_RST);
+    gpio_config(&io_conf);
+
+    // Reset display
     gpio_set_level(PIN_NUM_RST, 0);
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
     gpio_set_level(PIN_NUM_RST, 1);
-    vTaskDelay(120 / portTICK_PERIOD_MS);
-    
-    init_spi();
-    send_cmd(ST7735_NOP);
-    send_cmd(ST7735_SWRESET);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+
+    // Backlight on
+    gpio_set_level(PIN_NUM_BL, 1);
+
+    // SPI Initialization
+    spi_bus_config_t buscfg = {
+        .miso_io_num = PIN_NUM_MISO,
+        .mosi_io_num = PIN_NUM_MOSI,
+        .sclk_io_num = PIN_NUM_CLK,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = 4096,
+    };
+
+    spi_device_interface_config_t devcfg = {
+        .clock_speed_hz = 20 * 1000 * 1000,
+        .mode = 0,
+        .spics_io_num = PIN_NUM_CS,
+        .queue_size = 7,
+    };
+
+    ESP_ERROR_CHECK(spi_bus_initialize(HSPI_HOST, &buscfg, 1));
+    ESP_ERROR_CHECK(spi_bus_add_device(HSPI_HOST, &devcfg, &spi));
+
+    // Display Initialization
+    send_cmd(0x01); // Software reset
     vTaskDelay(150 / portTICK_PERIOD_MS);
 
-    send_cmd(ST7735_SLPOUT);
-    vTaskDelay(120 / portTICK_PERIOD_MS);
+    send_cmd(0x11); // Sleep out
+    vTaskDelay(255 / portTICK_PERIOD_MS);
 
-    // Frame Rate Control (ST7735S)
-    send_cmd(0xB1);
-    send_data((uint8_t[]){0x05, 0x3C, 0x3C}, 3);
-    send_cmd(0xB2);
-    send_data((uint8_t[]){0x05, 0x3C, 0x3C}, 3);
-    send_cmd(0xB3);
-    send_data((uint8_t[]){0x05, 0x3C, 0x3C, 0x05, 0x3C, 0x3C}, 6);
+    send_cmd(0x3A); // Color mode
+    send_data((uint8_t[]){0x05}, 1); // 16-bit color
 
-    // Inverter Control
-    send_cmd(0xB4);
-    send_data((uint8_t[]){0x03}, 1);
-
-    // Power Control
-    send_cmd(0xC0);
-    send_data((uint8_t[]){0xA2, 0x02, 0x84}, 3);
-    send_cmd(0xC1);
-    send_data((uint8_t[]){0xC5}, 1);
-    send_cmd(0xC2);
-    send_data((uint8_t[]){0x0A, 0x00}, 2);
-    send_cmd(0xC3);
-    send_data((uint8_t[]){0x8A, 0x2A}, 2);
-    send_cmd(0xC4);
-    send_data((uint8_t[]){0x8A, 0xEE}, 2);
-    send_cmd(0xC5);
-    send_data((uint8_t[]){0x0E}, 1);
-    send_cmd(ST7735_COLMOD);
-    send_data((uint8_t[]){0x05}, 1);
-    send_cmd(ST7735_MADCTL);
-    send_data((uint8_t[]){0xC0}, 1); // RGB, xoay khác (thử 0x08, 0x48, 0x88 nếu cần)
-    send_cmd(0xE0);
-    send_data((uint8_t[]){0x0F, 0x1A, 0x0F, 0x18, 0x2F, 0x28, 0x20, 0x22,
-                          0x1F, 0x1B, 0x23, 0x37, 0x00, 0x07, 0x02, 0x10}, 16);
-    send_cmd(0xE1);
-    send_data((uint8_t[]){0x0F, 0x1B, 0x0F, 0x17, 0x33, 0x2C, 0x29, 0x2E,
-                          0x30, 0x30, 0x39, 0x3F, 0x00, 0x07, 0x03, 0x10}, 16);
-    send_cmd(ST7735_DISPON);
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    ESP_LOGI(TAG, "Display initialized successfully");
+    send_cmd(0x29); // Display on
+    vTaskDelay(100 / portTICK_PERIOD_MS);
 }
 
 void initialize_sntp() {
