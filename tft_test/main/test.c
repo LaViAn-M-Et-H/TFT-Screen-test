@@ -14,7 +14,6 @@
 #define DC           GPIO_NUM_2
 #define RST          GPIO_NUM_4
 
-// ========== Font 5x7 (A–Z) ==========
 const uint8_t font5x7[][5] = {
     {0x7C, 0x12, 0x11, 0x12, 0x7C}, // A
     {0x7F, 0x49, 0x49, 0x49, 0x36}, // B
@@ -44,7 +43,6 @@ const uint8_t font5x7[][5] = {
     {0x61, 0x51, 0x49, 0x45, 0x43}  // Z
 };
 
-// ========== LCD init commands ==========
 typedef struct {
     uint8_t cmd;
     uint8_t data[16];
@@ -54,46 +52,46 @@ typedef struct {
 static const lcd_init_cmd_t lcd_init_cmds[] = {
     {0x01, {0}, 0},
     {0x11, {0}, 0},
-    {0x3A, {0x05}, 1},     // RGB565
+    {0x3A, {0x05}, 1},     
     {0x36, {0x00}, 1},
     {0x29, {0}, 0},
     {0, {0}, 0xff}
 };
 
-// ========== SPI Send helpers ==========
-void send_cmd(spi_device_handle_t spi, uint8_t cmd) {
-    spi_transaction_t t = {
-        .flags = SPI_TRANS_USE_TXDATA,
-        .length = 8,
-        .tx_data = {cmd}
-    };
-    gpio_set_level(DC, 0);
-    spi_device_polling_transmit(spi, &t);
+void send_cmd (spi_device_handle_t spi, const uint8_t cmd){
+	spi_transaction_t t;							
+	memset(&t, 0, sizeof(t));						
+	t.flags = SPI_TRANS_USE_TXDATA;					
+	t.length = 8;									
+	t.tx_data[0] = cmd;								
+	gpio_set_level(DC, 0);							
+    esp_err_t ret = spi_device_polling_transmit(spi, &t);
+	assert(ret == ESP_OK);							
 }
 
-void send_data(spi_device_handle_t spi, const uint8_t *data, int length) {
-    if (length == 0) return;
-    spi_transaction_t t = {
-        .length = length * 8,
-        .tx_buffer = data
-    };
-    gpio_set_level(DC, 1);
-    spi_device_polling_transmit(spi, &t);
+void send_data(spi_device_handle_t spi, const uint8_t *data, int length){
+	spi_transaction_t t;							
+	memset(&t, 0, sizeof(t)); 	         			
+	t.length = 8*length;							
+	t.tx_buffer = data;								
+	gpio_set_level(DC, 1);							
+    esp_err_t ret = spi_device_polling_transmit(spi, &t); 
+	assert(ret == ESP_OK);							
 }
 
-// ========== LCD Setup ==========
-void lcd_init(spi_device_handle_t spi) {
-    int cmd = 0;
-    while (lcd_init_cmds[cmd].databytes != 0xff) {
-        send_cmd(spi, lcd_init_cmds[cmd].cmd);
-        if (lcd_init_cmds[cmd].databytes)
-            send_data(spi, lcd_init_cmds[cmd].data, lcd_init_cmds[cmd].databytes);
-        vTaskDelay(pdMS_TO_TICKS(10));
-        cmd++;
-    }
+void lcd_Init (spi_device_handle_t spi){
+	int cmd = 0;
+	while (lcd_init_cmds[cmd].databytes!=0xff) {	
+			send_cmd(spi, lcd_init_cmds[cmd].cmd);  
+	        if (lcd_init_cmds[cmd].databytes == 0) { 
+		        vTaskDelay(100 / portTICK_RATE_MS);}
+	        else{
+	        send_data(spi, lcd_init_cmds[cmd].data, lcd_init_cmds[cmd].databytes); 
+	        }
+	        cmd++;
+	    }
 }
 
-// ========== Drawing primitives ==========
 void draw_pixel(spi_device_handle_t spi, int x, int y, uint16_t color) {
     uint8_t caset[] = {0x00, x, 0x00, x};
     uint8_t raset[] = {0x00, y, 0x00, y};
@@ -124,40 +122,37 @@ void draw_string(spi_device_handle_t spi, const char *str, int x, int y, uint16_
     }
 }
 
-// ========== Main Application ==========
 void app_main(void) {
-    spi_device_handle_t spi;
+    gpio_set_direction (DC, GPIO_MODE_OUTPUT);  
+	gpio_set_direction (RST, GPIO_MODE_OUTPUT); 
 
-    gpio_set_direction(DC, GPIO_MODE_OUTPUT);
-    gpio_set_direction(RST, GPIO_MODE_OUTPUT);
+    esp_err_t ret;  							
+    spi_device_handle_t spi;					
+    spi_bus_config_t Busconfig={				
+        .mosi_io_num=PIN_NUM_MOSI,				
+        .sclk_io_num=PIN_NUM_CLK,				
+        .quadwp_io_num=-1,						
+        .quadhd_io_num=-1,						
+        .max_transfer_sz=2*128*160				
+    };
 
-    // Reset LCD
-    gpio_set_level(RST, 0);
-    vTaskDelay(pdMS_TO_TICKS(100));
+    spi_device_interface_config_t DeviceConfig={ 
+    	.command_bits = 0,						 
+		.address_bits = 0,						 
+		.dummy_bits = 0,						 
+		.mode = 0,								 
+		.clock_speed_hz = 8000000,				 
+		.spics_io_num = CS						 
+    };
+    gpio_set_level(RST, 0); //Reset LCD
+    vTaskDelay(100);
     gpio_set_level(RST, 1);
-    vTaskDelay(pdMS_TO_TICKS(100));
+    ret = spi_bus_initialize (SPI3_HOST, &Busconfig, SPI_DMA_CH_AUTO); 
+    assert(ret == ESP_OK);
+    ret = spi_bus_add_device(SPI3_HOST, &DeviceConfig, &spi);		   
+    assert(ret == ESP_OK);											   
+    lcd_Init(spi);
 
-    spi_bus_config_t buscfg = {
-        .mosi_io_num = PIN_NUM_MOSI,
-        .sclk_io_num = PIN_NUM_CLK,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-        .max_transfer_sz = 2 * 128 * 160
-    };
-
-    spi_device_interface_config_t devcfg = {
-        .mode = 0,
-        .clock_speed_hz = 10 * 1000 * 1000,
-        .spics_io_num = CS,
-        .queue_size = 1
-    };
-
-    spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO);
-    spi_bus_add_device(SPI3_HOST, &devcfg, &spi);
-
-    lcd_init(spi);
-
-    // Clear screen to black
     uint8_t caset[] = {0x00, 0x00, 0x00, 127};
     uint8_t raset[] = {0x00, 0x00, 0x00, 159};
     send_cmd(spi, 0x2A); send_data(spi, caset, 4);
@@ -168,7 +163,6 @@ void app_main(void) {
         send_data(spi, black, 2);
     }
 
-    // Draw text
-    draw_string(spi, "HELLO", 10, 10, 0xFFFF); // White
-    draw_string(spi, "WORLD", 10, 30, 0xF800); // Red
+    draw_string(spi, "HELLO", 10, 10, 0xFFFF); 
+    draw_string(spi, "WORLD", 10, 30, 0xFFFF); 
 }
