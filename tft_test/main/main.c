@@ -264,10 +264,11 @@ void init_display() {
     };
 
     spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = 20 * 1000 * 1000,
+        .clock_speed_hz = 4 * 1000 * 1000,
         .mode = 0,
         .spics_io_num = PIN_NUM_CS,
-        .queue_size = 7,
+        .queue_size = 10,
+        .flags = 0,
         .pre_cb = spi_pre_transfer_callback,
     };
 
