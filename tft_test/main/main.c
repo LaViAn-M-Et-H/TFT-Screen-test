@@ -143,7 +143,7 @@ const uint8_t font5x7[][5] = {
 };
 
 // Vẽ ký tự
-void draw_char(spi_device_handle_t spi, char c, int x, int y, uint16_t color) {
+void draw_char(char c, int x, int y, uint16_t color) {
     if (c < 'A' || c > 'Z') return;
     const uint8_t *bitmap = font5x7[c - 'A'];
     for (int col = 0; col < 5; col++) {
@@ -156,10 +156,10 @@ void draw_char(spi_device_handle_t spi, char c, int x, int y, uint16_t color) {
 }
 
 // Vẽ chuỗi văn bản
-void draw_string(uint16_t x, uint16_t y, const char *str, uint16_t fg_color, uint16_t bg_color) {
+void draw_string(uint16_t x, uint16_t y, const char *str,uint16_t color) {
     int orig_x = x;
     while (*str) {
-        draw_char(x, y, *str, fg_color, bg_color);
+        draw_char(*str,x, y , color);
         x += 6; // Chiều rộng ký tự + khoảng cách
         str++;
     }
@@ -336,7 +336,7 @@ void app_main(void) {
     fill_screen(COLOR_BLACK); // Đen
 
     // Hiển thị "hello world"
-    draw_string(10, 10, "HELLO WORLD", COLOR_WHITE, COLOR_BLACK);
+    draw_string(10, 10, "HELLO WORLD", COLOR_WHITE);
 
     // Giữ chương trình chạy
     while (1) {
