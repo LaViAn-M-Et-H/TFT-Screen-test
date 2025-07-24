@@ -336,7 +336,7 @@ void app_main(void) {
     fill_screen(COLOR_BLACK); // Đen
 
     // Hiển thị "hello world"
-    draw_string(10, 10, "hello world", COLOR_WHITE, COLOR_BLACK);
+    draw_string(10, 10, "HELLO WORLD", COLOR_WHITE, COLOR_BLACK);
 
     // Giữ chương trình chạy
     while (1) {
