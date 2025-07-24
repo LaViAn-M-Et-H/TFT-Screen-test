@@ -143,25 +143,13 @@ const uint8_t font5x7[][5] = {
 };
 
 // Vẽ ký tự
-void draw_char(uint16_t x, uint16_t y, char c, uint16_t fg_color, uint16_t bg_color) {
-    int index;
-    if (c == ' ') index = 0;
-    else if (c == 'h') index = 5;
-    else if (c == 'e') index = 10;
-    else if (c == 'l') index = 15;
-    else if (c == 'o') index = 20;
-    else if (c == 'w') index = 25;
-    else if (c == 'r') index = 30;
-    else if (c == 'd') index = 35;
-    else return; // Ký tự không được hỗ trợ
-
-    for (int i = 0; i < 5; i++) {
-        uint8_t line = font5x7[index + i];
-        for (int j = 0; j < 7; j++) {
-            if (line & (1 << (7 - j))) {
-                draw_pixel(x + i, y + j, fg_color);
-            } else {
-                draw_pixel(x + i, y + j, bg_color);
+void draw_char(spi_device_handle_t spi, char c, int x, int y, uint16_t color) {
+    if (c < 'A' || c > 'Z') return;
+    const uint8_t *bitmap = font5x7[c - 'A'];
+    for (int col = 0; col < 5; col++) {
+        for (int row = 0; row < 7; row++) {
+            if (bitmap[col] & (1 << row)) {
+                draw_pixel(spi, x + col, y + row, color);
             }
         }
     }
