@@ -149,7 +149,7 @@ void draw_char(spi_device_handle_t spi, char c, int x, int y, uint16_t color) {
     for (int col = 0; col < 5; col++) {
         for (int row = 0; row < 7; row++) {
             if (bitmap[col] & (1 << row)) {
-                draw_pixel(spi, x + col, y + row, color);
+                draw_pixel(x + col, y + row, color);
             }
         }
     }
