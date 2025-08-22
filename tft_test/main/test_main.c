@@ -1,35 +1,28 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "display.h"
-#include "soc/gpio_num.h"
 #include "wifi_app.h"
 #include "sntp.h"
-#include "reminders_store.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_event.h"
-#include "driver/gpio.h"
-#include "mqtt.h"
-#include "nvs.h" 
-#include "nvs_flash.h"
 #include <stdbool.h>
 
 #define TAG "TimeSync"
 
 #define UI_TASK_STACK_SIZE       12288
 #define UI_TASK_PRIORITY         10
-#define UI_TASK_CORE_ID          1      
+#define UI_TASK_CORE_ID          1      // core APP
 
 #define TIME_SYNC_TASK_STACK_SIZE 8192
 #define TIME_SYNC_TASK_PRIORITY 5
 #define TIME_SYNC_TASK_CORE_ID 0
 #define MAIN_TASK_STACK_SIZE 16384 
-#define MAIN_TASK_PRIORITY 6 
+#define MAIN_TASK_PRIORITY 15 
 #define MAIN_TASK_CORE_ID 0
 
 void main_task(void *pvParam) {
-	
     ESP_LOGI(TAG, "Main task started");
     ESP_LOGI(TAG, "Free heap before main task: %lu bytes", (unsigned long)esp_get_free_heap_size());
     wifi_connect();
@@ -60,29 +53,23 @@ void main_task(void *pvParam) {
 }
 
 void app_main(void) {
-	esp_err_t err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_LOGW(TAG, "Khởi tạo lại NVS");
-        nvs_flash_erase();
-        nvs_flash_init();
-    }
-    load_reminders_from_nvs();
-	ESP_LOGI(TAG, "Application started");
+    ESP_LOGI(TAG, "Application started");
     ESP_LOGI(TAG, "Free heap before app_main: %lu bytes", (unsigned long)esp_get_free_heap_size());
     ESP_LOGI(TAG, "Minimum free heap: %lu bytes", (unsigned long)esp_get_minimum_free_heap_size());
 
     init_display();
 
+    // [ADDED] Tạo UI task trước để phản hồi nút ngay
     BaseType_t ret_ui = xTaskCreatePinnedToCore(
         ui_task, "ui_task",
         UI_TASK_STACK_SIZE, NULL,
         UI_TASK_PRIORITY, NULL, UI_TASK_CORE_ID
     );
-    
     if (ret_ui != pdPASS) {
         ESP_LOGE(TAG, "Failed to create UI task: %d", ret_ui);
     }
 
+    // Tạo main_task lo Wi-Fi + SNTP + spawn print_time_task
     BaseType_t ret = xTaskCreatePinnedToCore(
         main_task, "main_task",
         MAIN_TASK_STACK_SIZE, NULL,

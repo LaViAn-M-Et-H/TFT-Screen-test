@@ -1,5 +1,13 @@
 #define TAG "TimeSync"
 
+#include <stdint.h>
+#include "freertos/FreeRTOS.h"
+#include "font.h"
+#include "freertos/task.h"
+#include "driver/spi_master.h"
+#include "driver/gpio.h"
+#include "esp_log.h"
+
 #define PIN_NUM_MISO   -1  
 #define PIN_NUM_MOSI   9   
 #define PIN_NUM_CLK    10  
@@ -12,6 +20,8 @@
 #define TFT_HEIGHT  160
 #define OFFSET_X    2   
 #define OFFSET_Y    1   
+#define FONT_W  6
+#define FONT_H  8
 
 #define COLOR_RED    0xF800
 #define COLOR_GREEN  0x07E0
@@ -42,8 +52,6 @@ void send_cmd(uint8_t cmd) {
     ret = spi_device_polling_transmit(spi, &t);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Write command 0x%02X failed: %s", cmd, esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "Write command 0x%02X: OK", cmd);
     }
 }
 
@@ -77,16 +85,48 @@ void set_addr_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
     send_cmd(ST7735_RAMWR);
 }
 
-void fill_screen(uint16_t color) {
-    uint8_t data[2] = {color >> 8, color & 0xFF};
-    set_addr_window(0, 0, TFT_WIDTH - 1, TFT_HEIGHT - 1);
-    for (int y = 0; y < TFT_HEIGHT; y++) {
-        for (int x = 0; x < TFT_WIDTH; x++) {
-            send_data(data, 2);
+static void push_color_repeat_chunked(uint16_t color, size_t px_count) {
+    static uint16_t buf[256];
+    size_t chunk_px = sizeof(buf)/sizeof(buf[0]);
+
+    uint16_t c_be = (color << 8) | (color >> 8);
+    for (size_t i = 0; i < chunk_px; i++) buf[i] = c_be;
+
+    size_t sent = 0;
+    while (px_count > 0) {
+        size_t n = (px_count > chunk_px) ? chunk_px : px_count;
+
+        spi_transaction_t t = {
+            .length    = (int)(n * 2 * 8),
+            .tx_buffer = buf,
+            .flags     = 0
+        };
+        gpio_set_level(PIN_NUM_DC, 1);
+        esp_err_t ret = spi_device_polling_transmit(spi, &t);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "push_color_repeat_chunked fail: %s", esp_err_to_name(ret));
+            return;
         }
-        vTaskDelay(1 / portTICK_PERIOD_MS); 
+
+        px_count -= n;
+        sent += n;
+        if ((sent & (chunk_px * 8 - 1)) == 0) {
+            taskYIELD();
+        }
     }
-    ESP_LOGI(TAG, "Screen filled with color 0x%04X", color);
+}
+
+void fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
+    if (x >= TFT_WIDTH || y >= TFT_HEIGHT) return;
+    if (x + w > TFT_WIDTH)  w = TFT_WIDTH  - x;
+    if (y + h > TFT_HEIGHT) h = TFT_HEIGHT - y;
+    set_addr_window(x, y, x + w - 1, y + h - 1);
+    push_color_repeat_chunked(color, (size_t)w * h);
+}
+
+void fill_screen(uint16_t color) {
+    set_addr_window(0, 0, TFT_WIDTH - 1, TFT_HEIGHT - 1);
+    push_color_repeat_chunked(color, (size_t)TFT_WIDTH * TFT_HEIGHT);
 }
 
 void draw_pixel(uint16_t x, uint16_t y, uint16_t color) {
@@ -116,14 +156,16 @@ void draw_char(char c, int x, int y, uint16_t color) {
     }
 }
 
-void draw_string(uint16_t x, uint16_t y, const char *str,uint16_t color) {
-    int orig_x = x;
+void draw_string(uint16_t x, uint16_t y, const char *str, uint16_t color) {
+    int count = 0;
     while (*str) {
-        draw_char(*str,x, y , color);
-        x += 6; 
+        draw_char(*str, x, y, color);
+        x += 6;
         str++;
+        if ((++count & 15) == 0) {
+            taskYIELD();   
+        }
     }
-    ESP_LOGI(TAG, "Drew string at (%d, %d): %s", orig_x, y, str);
 }
 
 void init_spi() {
@@ -147,7 +189,7 @@ void init_spi() {
     };
 
     spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = 4 * 1000 * 1000, 
+        .clock_speed_hz = 10 * 1000 * 1000,  
         .mode = 0,                         
         .spics_io_num = PIN_NUM_CS,
         .queue_size = 10,                  
